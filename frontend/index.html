@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIPEKA-Banjir 3D — Sistem Pemetaan Kerawanan Banjir Kota Pekanbaru</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Pinned CDN Libraries: MapLibre GL JS 4.7.1, Three.js 0.160.0, Chart.js 4.4.4 -->
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+  <!-- Application Stylesheet -->
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <!-- Demo Data Disclaimer Banner -->
+  <div id="demo-banner" class="demo-banner hidden">
+    ⚠️ DATA DEMO — Data sintetis untuk pengujian sistem, bukan hasil pengukuran sungguhan.
+  </div>
+
+  <!-- Top Navigation & 6-Step Stepper -->
+  <header class="top-navbar">
+    <div class="brand-group" onclick="SIPEKAApp.goToStep(1)">
+      <div class="brand-icon">3D</div>
+      <div>
+        <div class="brand-title">SIPEKA-Banjir 3D</div>
+        <div class="brand-subtitle">Kota Pekanbaru • MCE Weighted Overlay (EPSG:32647)</div>
+      </div>
+    </div>
+
+    <nav class="stepper-nav" aria-label="Tahapan Analisis">
+      <button id="stepper-btn-1" class="step-btn active" onclick="SIPEKAApp.goToStep(1)">
+        <span class="step-num">1</span> Upload Data
+      </button>
+      <button id="stepper-btn-2" class="step-btn" onclick="SIPEKAApp.goToStep(2)">
+        <span class="step-num">2</span> Parameter &amp; Bobot
+      </button>
+      <button id="stepper-btn-3" class="step-btn" onclick="SIPEKAApp.goToStep(3)">
+        <span class="step-num">3</span> Hitung
+      </button>
+      <button id="stepper-btn-4" class="step-btn" onclick="SIPEKAApp.goToStep(4)">
+        <span class="step-num">4</span> Hasil 3D
+      </button>
+      <button id="stepper-btn-5" class="step-btn" onclick="SIPEKAApp.goToStep(5)">
+        <span class="step-num">5</span> Validasi
+      </button>
+      <button id="stepper-btn-6" class="step-btn" onclick="SIPEKAApp.goToStep(6)">
+        <span class="step-num">6</span> Ekspor
+      </button>
+    </nav>
+
+    <div class="nav-actions">
+      <button class="btn btn-primary btn-sm" onclick="SIPEKAApp.openMobileAccessModal()" title="Lihat Link Wi-Fi & QR Code untuk membuka di HP">
+        📱 Buka di HP
+      </button>
+      <button class="btn btn-secondary btn-sm" onclick="SIPEKAApp.loadDemoData(true)" title="Muat Data Demo dan langsung tampilkan Peta 3D">
+        ⚡ Demo 1-Klik
+      </button>
+      <button id="btn-theme-toggle" class="btn btn-secondary btn-sm" onclick="SIPEKAApp.toggleTheme()">
+        ☀️ Mode Terang
+      </button>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero-section">
+    <div class="hero-badge">
+      <span>🌊 Sistem Informasi Geografis 3D • 15 Kecamatan Kota Pekanbaru</span>
+    </div>
+    <h1 class="hero-title">SIPEKA-Banjir 3D Kota Pekanbaru</h1>
+    <p class="hero-thesis">
+      <em>"Analisis Kerawanan Banjir Menggunakan Metode Overlay Berbasis Sistem Informasi Geografis di Kota Pekanbaru"</em>
+      — Multi-Criteria Evaluation (MCE) dengan Weighted Overlay pada Grid Raster 30m × 30m (WGS 84 / UTM Zone 47N).
+    </p>
+    <div class="formula-pill">
+      S = 0,25·CH + 0,25·Slope + 0,20·Elev + 0,15·LU + 0,15·Riv &nbsp;|&nbsp; Ambang Eksak: 7/3 (2,33) &amp; 11/3 (3,67)
+    </div>
+    <div class="hero-cta-group">
+      <button class="btn btn-secondary" onclick="SIPEKAApp.goToStep(1)">
+        📂 Mulai Analisis (Upload Data)
+      </button>
+      <button id="btn-hero-demo" class="btn btn-primary" onclick="SIPEKAApp.loadDemoData(true)">
+        ⚡ Coba Data Demo (1-Klik 3D)
+      </button>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       LANGKAH 1: UPLOAD DATA SPASIAL & TABULAR
+       ======================================================================== -->
+  <main id="step-panel-1" class="step-panel">
+    <div class="glass-card">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Langkah 1 — Upload Data Input Geospasial</h2>
+          <p class="section-desc">
+            Unggah 5 layer wajib (+ 1 titik banjir opsional untuk validasi) atau klik <b>Muat Data Demo</b> untuk menguji seluruh alur secara instan.
+          </p>
+        </div>
+        <div style="display:flex;gap:0.65rem;flex-wrap:wrap;">
+          <button class="btn btn-secondary" onclick="SIPEKAApp.loadDemoData(false)">
+            🧪 Muat Data Demo ke Kartu
+          </button>
+          <button class="btn btn-primary" onclick="SIPEKAApp.goToStep(2)">
+            Lanjut ke Parameter &amp; Bobot →
+          </button>
+        </div>
+      </div>
+
+      <div class="upload-grid">
+        <!-- 1. DEMNAS -->
+        <div id="upload-card-dem" class="upload-card">
+          <div>
+            <div class="upload-header">
+              <div>
+                <h3 style="font-size:0.98rem;">1. DEMNAS (Elevasi &amp; Lereng) <span style="color:#f87171;">*Wajib</span></h3>
+                <p style="font-size:0.76rem;color:var(--text-muted);">GeoTIFF (.tif), mendukung banyak lembar (mosaic otomatis), mdpl.</p>
+              </div>
+              <span id="status-badge-dem" class="status-pill pending">Belum Diunggah</span>
+            </div>
+          </div>
+          <label class="dropzone-area" for="file-input-dem">
+            <div style="font-size:1.35rem;">🏔️</div>
+            <div style="font-size:0.8rem;font-weight:600;">Seret &amp; Lepas GeoTIFF DEMNAS atau Klik Pilih File</div>
+            <input id="file-input-dem" type="file" accept=".tif,.tiff" multiple class="hidden" />
+          </label>
+          <div id="upload-info-dem" style="font-size:0.76rem;color:var(--text-secondary);"></div>
+        </div>
+
+        <!-- 2. Batas 15 Kecamatan -->
+        <div id="upload-card-kecamatan" class="upload-card">
+          <div>
+            <div class="upload-header">
+              <div>
+                <h3 style="font-size:0.98rem;">2. Batas Administrasi 15 Kecamatan <span style="color:#f87171;">*Wajib</span></h3>
+                <p style="font-size:0.76rem;color:var(--text-muted);">SHP (dalam .zip) atau GeoPackage (.gpkg).</p>
+              </div>
+              <span id="status-badge-kecamatan" class="status-pill pending">Belum Diunggah</span>
+            </div>
+          </div>
+          <label class="dropzone-area" for="file-input-kecamatan">
+            <div style="font-size:1.35rem;">🗺️</div>
+            <div style="font-size:0.8rem;font-weight:600;">Pilih File Batas Kecamatan (.zip / .gpkg)</div>
+            <input id="file-input-kecamatan" type="file" accept=".zip,.gpkg,.geojson" class="hidden" />
+          </label>
+          <div class="hidden" style="margin-top:0.35rem;">
+            <label style="font-size:0.74rem;color:var(--text-muted);">Kolom Nama Kecamatan:</label>
+            <select id="col-select-kecamatan" onchange="SIPEKAApp.onColumnChange('kecamatan', this.value)"></select>
+          </div>
+          <div id="upload-info-kecamatan" style="font-size:0.76rem;color:var(--text-secondary);"></div>
+        </div>
+
+        <!-- 3. Jaringan Sungai -->
+        <div id="upload-card-sungai" class="upload-card">
+          <div>
+            <div class="upload-header">
+              <div>
+                <h3 style="font-size:0.98rem;">3. Jaringan Sungai (Siak &amp; Anak Sungai) <span style="color:#f87171;">*Wajib</span></h3>
+                <p style="font-size:0.76rem;color:var(--text-muted);">SHP (.zip) atau .gpkg. Poligon sungai otomatis diambil garis tepinya.</p>
+              </div>
+              <span id="status-badge-sungai" class="status-pill pending">Belum Diunggah</span>
+            </div>
+          </div>
+          <label class="dropzone-area" for="file-input-sungai">
+            <div style="font-size:1.35rem;">🌊</div>
+            <div style="font-size:0.8rem;font-weight:600;">Pilih File Jaringan Sungai (.zip / .gpkg)</div>
+            <input id="file-input-sungai" type="file" accept=".zip,.gpkg,.geojson" class="hidden" />
+          </label>
+          <div class="hidden" style="margin-top:0.35rem;">
+            <label style="font-size:0.74rem;color:var(--text-muted);">Kolom Nama Sungai (Opsional):</label>
+            <select id="col-select-sungai" onchange="SIPEKAApp.onColumnChange('sungai', this.value)"></select>
+          </div>
+          <div id="upload-info-sungai" style="font-size:0.76rem;color:var(--text-secondary);"></div>
+        </div>
+
+        <!-- 4. Curah Hujan -->
+        <div id="upload-card-curah_hujan" class="upload-card">
+          <div>
+            <div class="upload-header">
+              <div>
+                <h3 style="font-size:0.98rem;">4. Data Curah Hujan Stasiun <span style="color:#f87171;">*Wajib</span></h3>
+                <p style="font-size:0.76rem;color:var(--text-muted);">CSV / XLSX dengan kolom: <code>stasiun, lat, lon, tahun/tanggal, hujan_mm</code>.</p>
+              </div>
+              <span id="status-badge-curah_hujan" class="status-pill pending">Belum Diunggah</span>
+            </div>
+          </div>
+          <label class="dropzone-area" for="file-input-curah_hujan">
+            <div style="font-size:1.35rem;">🌧️</div>
+            <div style="font-size:0.8rem;font-weight:600;">Pilih Tabel Curah Hujan (.csv / .xlsx)</div>
+            <input id="file-input-curah_hujan" type="file" accept=".csv,.xlsx,.xls" class="hidden" />
+          </label>
+          <div id="upload-info-curah_hujan" style="font-size:0.76rem;color:var(--text-secondary);"></div>
+        </div>
+
+        <!-- 5. Penggunaan Lahan -->
+        <div id="upload-card-penggunaan_lahan" class="upload-card">
+          <div>
+            <div class="upload-header">
+              <div>
+                <h3 style="font-size:0.98rem;">5. Tutupan / Penggunaan Lahan <span style="color:#f87171;">*Wajib</span></h3>
+                <p style="font-size:0.76rem;color:var(--text-muted);">Poligon SHP (.zip) atau .gpkg. Pilih kolom kelas lahan untuk pemetaan skor.</p>
+              </div>
+              <span id="status-badge-penggunaan_lahan" class="status-pill pending">Belum Diunggah</span>
+            </div>
+          </div>
+          <label class="dropzone-area" for="file-input-penggunaan_lahan">
+            <div style="font-size:1.35rem;">🏙️</div>
+            <div style="font-size:0.8rem;font-weight:600;">Pilih File Penggunaan Lahan (.zip / .gpkg)</div>
+            <input id="file-input-penggunaan_lahan" type="file" accept=".zip,.gpkg,.geojson" class="hidden" />
+          </label>
+          <div class="hidden" style="margin-top:0.35rem;">
+            <label style="font-size:0.74rem;color:var(--text-muted);">Kolom Kelas Lahan:</label>
+            <select id="col-select-penggunaan_lahan" onchange="SIPEKAApp.onColumnChange('penggunaan_lahan', this.value)"></select>
+          </div>
+          <div id="upload-info-penggunaan_lahan" style="font-size:0.76rem;color:var(--text-secondary);"></div>
+        </div>
+
+        <!-- 6. Titik Banjir Historis -->
+        <div id="upload-card-titik_banjir" class="upload-card">
+          <div>
+            <div class="upload-header">
+              <div>
+                <h3 style="font-size:0.98rem;">6. Titik Banjir Historis (Validasi) <span style="color:var(--accent-cyan);">Opsional</span></h3>
+                <p style="font-size:0.76rem;color:var(--text-muted);">CSV (<code>lat, lon</code>, opsional <code>kelas_lapangan</code>, opsional <code>label</code>). Standar ≥ 50 titik.</p>
+              </div>
+              <span id="status-badge-titik_banjir" class="status-pill pending">Opsional</span>
+            </div>
+          </div>
+          <label class="dropzone-area" for="file-input-titik_banjir">
+            <div style="font-size:1.35rem;">📍</div>
+            <div style="font-size:0.8rem;font-weight:600;">Pilih CSV Titik Banjir Historis (.csv)</div>
+            <input id="file-input-titik_banjir" type="file" accept=".csv,.xlsx" class="hidden" />
+          </label>
+          <div id="upload-info-titik_banjir" style="font-size:0.76rem;color:var(--text-secondary);"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       LANGKAH 2: PARAMETER, BOBOT, TABEL SKOR & DAFTAR ASUMSI
+       ======================================================================== -->
+  <section id="step-panel-2" class="step-panel hidden">
+    <div class="glass-card">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Langkah 2 — Parameter, Bobot &amp; Tabel Skoring MCE</h2>
+          <p class="section-desc">
+            Seluruh nilai default mengikuti metodologi skripsi secara literal (Skor 5 = Paling Rawan, Skor 1 = Paling Aman). Total bobot wajib tepat <b>100%</b>.
+          </p>
+        </div>
+        <div style="display:flex;gap:0.65rem;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="SIPEKAApp.resetDefaultWeights()">
+            ↺ Reset Bobot Skripsi
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="SIPEKAApp.normalizeWeightsTo100()">
+            ⚖️ Normalisasi ke 100%
+          </button>
+          <button class="btn btn-primary" onclick="SIPEKAApp.goToStep(3)">
+            Lanjut ke Langkah 3 (Hitung) →
+          </button>
+        </div>
+      </div>
+
+      <div class="two-col-grid">
+        <!-- Left Column: Weight Sliders + Landuse Mapping + River Filter -->
+        <div>
+          <h3 style="font-size:1.05rem;margin-bottom:0.65rem;">1. Bobot Parameter Weighted Overlay</h3>
+          <div id="live-formula-preview" class="formula-pill" style="width:100%;text-align:center;margin-bottom:0.85rem;">
+            S = 0.25·CH + 0.25·Slope + 0.20·Elev + 0.15·LU + 0.15·Riv
+          </div>
+          <div id="weights-sliders-container"></div>
+          <div id="weight-total-banner" class="weight-total-banner valid"></div>
+
+          <!-- Landuse Class Mapping Table -->
+          <div style="margin-top:1.5rem;">
+            <h3 style="font-size:1.05rem;margin-bottom:0.35rem;">2. Pemetaan Kelas Penggunaan Lahan → Skor (1–5)</h3>
+            <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.6rem;">
+              Setiap kelas unik pada poligon tutupan lahan wajib dipetakan ke skor kerawanan 1–5 berdasarkan koefisien limpasan (C).
+            </p>
+            <div id="landuse-unmapped-warning" class="weight-total-banner invalid hidden" style="margin-bottom:0.65rem;">
+              ⚠️ Peringatan: Terdapat kelas lahan yang belum memiliki skor! Sistem tidak memberi skor diam-diam.
+            </div>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Kelas Lahan Terdeteksi</th>
+                  <th>Skor Kerawanan (1–5) &amp; Koefisien Limpasan (C)</th>
+                </tr>
+              </thead>
+              <tbody id="landuse-mapping-tbody"></tbody>
+            </table>
+          </div>
+
+          <!-- River Filter -->
+          <div style="margin-top:1.5rem;">
+            <h3 style="font-size:1.05rem;margin-bottom:0.35rem;">3. Filter Sungai yang Digunakan (Parameter E)</h3>
+            <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.55rem;">
+              Pilih sungai utama dan anak sungai di Kota Pekanbaru untuk perhitungan jarak Euclidean (<code>distance_transform_edt</code>):
+            </p>
+            <div id="river-filter-container" style="display:flex;flex-wrap:wrap;gap:0.45rem;"></div>
+          </div>
+        </div>
+
+        <!-- Right Column: Editable Scoring Tables + 6 Methodological Assumptions -->
+        <div>
+          <h3 style="font-size:1.05rem;margin-bottom:0.65rem;">4. Tabel Skor Parameter Kontinu (Editable)</h3>
+          <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.75rem;">
+            Aturan batas kelas: <b>batas bawah inklusif (≥)</b>, <b>batas atas eksklusif (&lt;)</b>, kecuali pada kelas teratas.
+          </p>
+          <div id="scoring-tables-container"></div>
+
+          <!-- Daftar Asumsi Metodologis (Wajib tampil di UI Langkah 2) -->
+          <div class="glass-card" style="margin-top:1.25rem;background:rgba(56,189,248,0.07);border-color:var(--border-accent);">
+            <h4 style="font-size:0.95rem;color:var(--accent-cyan);margin-bottom:0.55rem;">
+              📋 Daftar Asumsi Metodologis &amp; Catatan CRS (EPSG:32647)
+            </h4>
+            <ul id="assumptions-list" style="padding-left:1.2rem;font-size:0.8rem;color:var(--text-secondary);"></ul>
+            <div style="margin-top:0.65rem;padding-top:0.55rem;border-top:1px solid var(--border-glass);font-size:0.77rem;color:var(--text-muted);">
+              <b>Catatan CRS Target:</b> Sistem menggunakan <b>WGS 84 / UTM Zone 47N (EPSG:32647)</b> karena Kota Pekanbaru (101°14'–101°34' BT) berada di Zona 47N (96°–102° BT), bukan Zona 48N.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       LANGKAH 3: EKSEKUSI PERHITUNGAN MCE WEIGHTED OVERLAY
+       ======================================================================== -->
+  <section id="step-panel-3" class="step-panel hidden">
+    <div class="glass-card" style="text-align:center;padding:2.5rem 1.5rem;">
+      <h2 class="section-title" style="font-size:1.65rem;margin-bottom:0.5rem;">
+        Langkah 3 — Hitung Kerawanan Banjir Kota Pekanbaru
+      </h2>
+      <p class="section-desc" style="max-width:680px;margin:0 auto 1.6rem;">
+        Sistem akan menjalankan pra-pengolahan spasial ke grid acuan 30m × 30m (EPSG:32647), menghitung 5 raster parameter, melakukan Weighted Overlay, dan merender peta 3D beserta simulasi muka air.
+      </p>
+
+      <button id="btn-run-compute" class="btn btn-primary btn-xl" onclick="SIPEKAApp.runFullComputation(false)">
+        🚀 HITUNG KERAWANAN BANJIR
+      </button>
+
+      <div id="compute-error-box" class="weight-total-banner invalid hidden" style="max-width:680px;margin:1.2rem auto 0;"></div>
+
+      <div class="progress-stage-list">
+        <div id="prog-stage-1" class="progress-stage-item">
+          <span class="step-num">1</span>
+          <div>
+            <b>Pra-Pengolahan Geospasial (EPSG:32647)</b>
+            <div style="font-size:0.76rem;color:var(--text-muted);">Reproject layer, perbaikan geometri (make_valid), clip batas 15 kecamatan, resample bilinear DEM 30m.</div>
+          </div>
+        </div>
+        <div id="prog-stage-2" class="progress-stage-item">
+          <span class="step-num">2</span>
+          <div>
+            <b>Pemodelan 5 Parameter Kerawanan (Skor 1–5)</b>
+            <div style="font-size:0.76rem;color:var(--text-muted);">Interpolasi IDW p=2 curah hujan, Slope Horn 3×3 (%), Elevasi DEMNAS, Rasterisasi Lahan, &amp; Euclidean Distance Sungai.</div>
+          </div>
+        </div>
+        <div id="prog-stage-3" class="progress-stage-item">
+          <span class="step-num">3</span>
+          <div>
+            <b>Weighted Overlay &amp; Klasifikasi Equal Interval</b>
+            <div style="font-size:0.76rem;color:var(--text-muted);">Komputasi indeks S dan klasifikasi ambang eksak 7/3 (Rendah/Sedang) dan 11/3 (Sedang/Tinggi).</div>
+          </div>
+        </div>
+        <div id="prog-stage-4" class="progress-stage-item">
+          <span class="step-num">4</span>
+          <div>
+            <b>Statistik Zonal 15 Kecamatan &amp; Validasi Akurasi</b>
+            <div style="font-size:0.76rem;color:var(--text-muted);">Perhitungan luas (Ha &amp; %), peringkat kerawanan kecamatan, confusion matrix, dan analisis sensitivitas ±5%.</div>
+          </div>
+        </div>
+        <div id="prog-stage-5" class="progress-stage-item">
+          <span class="step-num">5</span>
+          <div>
+            <b>Pembangkitan Terrain-RGB MapLibre 3D &amp; Mesh Simulasi Three.js</b>
+            <div style="font-size:0.76rem;color:var(--text-muted);">Menyiapkan tekstur 3D dan mesh elevasi interaktif.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       LANGKAH 4: HASIL 3D (PETA 3D MAPLIBRE, SIMULASI THREE.JS & DASBOR)
+       ======================================================================== -->
+  <section id="step-panel-4" class="step-panel hidden">
+    <!-- Top Action & Mode Bar -->
+    <div class="glass-card" style="margin-bottom:1.1rem;padding:0.9rem 1.25rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+        <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+          <button id="btn-mode-maplibre" class="btn btn-primary btn-sm" onclick="SIPEKAApp.switch3DMode('maplibre')">
+            🗺️ Peta 3D Interaktif (MapLibre)
+          </button>
+          <button id="btn-mode-threejs" class="btn btn-secondary btn-sm" onclick="SIPEKAApp.switch3DMode('threejs')">
+            🌊 Mode Simulasi Banjir 3D &amp; Hujan (Three.js)
+          </button>
+          <span id="compute-timing-badge" class="status-pill success"></span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:0.55rem;flex-wrap:wrap;">
+          <button id="btn-quick-recalc" class="btn btn-secondary btn-sm" onclick="SIPEKAApp.recalculateWeightsQuick()" title="Hitung ulang overlay &lt; 2 detik memakai cache 5 parameter">
+            ⚡ Hitung Ulang Cepat (&lt;2 dtk)
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="SIPEKAApp.download3DScreenshot()">
+            📸 Screenshot 3D (PNG)
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="SIPEKAApp.goToStep(5)">
+            Validasi &amp; Sensitivitas →
+          </button>
+        </div>
+      </div>
+      <div id="results-warnings-box" class=" hidden" style="margin-top:0.65rem;padding:0.5rem 0.75rem;border-radius:8px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.4);font-size:0.76rem;color:#fbbf24;"></div>
+    </div>
+
+    <div class="workspace-3d-layout">
+      <!-- Left Column: 3D Viewport (MapLibre OR Three.js) -->
+      <div>
+        <!-- A. MapLibre 3D Viewport -->
+        <div id="maplibre-wrapper" class="viewport-card">
+          <div class="map-overlay-top">
+            <div class="floating-control-bar">
+              <label style="font-weight:700;">Layer:</label>
+              <select style="width:auto;" onchange="SIPEKAMap3D.setOverlayLayer(this.value)">
+                <option value="kelas">Kelas Kerawanan (Hijau/Kuning/Merah)</option>
+                <option value="skor_s">Skor Komposit S (1,00 – 5,00)</option>
+                <option value="curah_hujan">Skor Parameter Curah Hujan (CH)</option>
+                <option value="kemiringan_lereng">Skor Parameter Kemiringan Lereng</option>
+                <option value="elevasi">Skor Parameter Elevasi (DEM)</option>
+                <option value="penggunaan_lahan">Skor Parameter Penggunaan Lahan</option>
+                <option value="jarak_sungai">Skor Parameter Jarak Sungai</option>
+              </select>
+
+              <label style="margin-left:0.35rem;">Opasitas:</label>
+              <input type="range" min="0" max="1" step="0.05" value="0.62" style="width:70px;"
+                oninput="SIPEKAMap3D.setOverlayOpacity(this.value)" />
+
+              <label style="margin-left:0.35rem;">Terrain 3D:</label>
+              <input type="range" min="0" max="6" step="0.5" value="2.5" style="width:65px;"
+                oninput="SIPEKAMap3D.setTerrainExaggeration(this.value)" />
+            </div>
+
+            <div class="floating-control-bar">
+              <input id="map-search-input" type="text" placeholder="Cari Kecamatan / lat,lon..."
+                style="width:175px;padding:0.3rem 0.55rem;font-size:0.76rem;"
+                onkeydown="if(event.key==='Enter') SIPEKAMap3D.searchLocation(this.value)" />
+              <button class="btn btn-secondary btn-sm" onclick="SIPEKAMap3D.searchLocation(document.getElementById('map-search-input').value)">
+                🔍
+              </button>
+            </div>
+          </div>
+
+          <div id="maplibre-container"></div>
+
+          <div class="map-overlay-bottom">
+            <div class="legend-box">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;margin-bottom:0.2rem;">
+                <span style="font-weight:800;color:var(--accent-cyan);">LEGENDA KERAWANAN (Klik Peta)</span>
+                <button id="btn-toggle-legend" class="btn btn-secondary btn-sm" style="padding:0.15rem 0.5rem;font-size:0.68rem;" onclick="SIPEKAApp.toggleLegendCollapse()">
+                  ▼ Sembunyikan
+                </button>
+              </div>
+              <div id="map-legend-body">
+                <div class="legend-item"><span class="legend-swatch" style="background:#22c55e;"></span> Rendah (1,00 ≤ S &lt; 2,33)</div>
+                <div class="legend-item"><span class="legend-swatch" style="background:#eab308;"></span> Sedang (2,33 ≤ S &lt; 3,67)</div>
+                <div class="legend-item"><span class="legend-swatch" style="background:#ef4444;"></span> Tinggi (3,67 ≤ S ≤ 5,00)</div>
+                <div class="legend-item"><span style="width:18px;border-top:2px dashed #fef08a;display:inline-block;"></span> Batas Administrasi 15 Kecamatan</div>
+                <div class="legend-item"><span style="width:18px;border-top:2.5px dashed #38bdf8;display:inline-block;"></span> Batas Kota Pekanbaru</div>
+                <div style="margin-top:0.45rem;display:flex;gap:0.65rem;flex-wrap:wrap;font-size:0.72rem;">
+                  <label><input type="checkbox" checked onchange="SIPEKAMap3D.toggleVectorLayer('kecamatan', this.checked)" /> 15 Kecamatan &amp; Label</label>
+                  <label><input type="checkbox" checked onchange="SIPEKAMap3D.toggleVectorLayer('sungai', this.checked)" /> Sungai</label>
+                  <label><input type="checkbox" checked onchange="SIPEKAMap3D.toggleVectorLayer('validasi', this.checked)" /> Titik Validasi</label>
+                </div>
+              </div>
+            </div>
+
+            <div class="floating-control-bar">
+              <select style="width:auto;" onchange="SIPEKAMap3D.setBasemap(this.value)">
+                <option value="google_hybrid" selected>Basemap: Google Maps Hybrid (Satelit + Label)</option>
+                <option value="google_satellite">Basemap: Google Maps Satellite (Citra Satelit)</option>
+                <option value="google_terrain">Basemap: Google Maps Terrain &amp; Jalan</option>
+                <option value="osm">Basemap: OpenStreetMap</option>
+                <option value="esri_satellite">Basemap: Esri World Imagery</option>
+              </select>
+              <button id="btn-auto-tour" class="btn btn-secondary btn-sm" onclick="SIPEKAMap3D.toggleAutoTour(this)">
+                ✈️ Tur Otomatis
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="SIPEKAMap3D.fitToCity()">
+                ⟳ Reset Kamera
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- B. Three.js 3D Flood & Rain Simulation Viewport -->
+        <div id="threejs-wrapper" class="viewport-card hidden">
+          <div class="map-overlay-top">
+            <div class="floating-control-bar">
+              <strong style="color:var(--accent-cyan);">🌊 Kenaikan Muka Air Sungai:</strong>
+              <input id="slider-water-rise" type="range" min="0" max="20" step="0.2" value="0" style="width:120px;"
+                oninput="SIPEKASim3D.updateWaterLevel(this.value)" />
+              <span id="sim-water-val" style="font-family:var(--font-mono);font-weight:800;color:#38bdf8;">+0.0 m</span>
+              <button class="btn btn-primary btn-sm" onclick="SIPEKASim3D.toggleWaterAnimation(this)">
+                ▶ Play Air Naik
+              </button>
+            </div>
+
+            <div class="floating-control-bar">
+              <label><input type="checkbox" checked onchange="SIPEKASim3D.toggleRain(this.checked)" /> 🌧️ Hujan</label>
+              <input type="range" min="0.3" max="2.5" step="0.1" value="1.0" style="width:65px;"
+                title="Intensitas Hujan" oninput="SIPEKASim3D.setRainIntensity(this.value)" />
+              <label style="margin-left:0.35rem;">Relief:</label>
+              <input type="range" min="0.8" max="5.0" step="0.2" value="2.4" style="width:65px;"
+                oninput="SIPEKASim3D.setVerticalExaggeration(this.value)" />
+              <label><input type="checkbox" checked onchange="SIPEKASim3D.toggleAutoRotate(this.checked)" /> Putar</label>
+              <button class="btn btn-secondary btn-sm" onclick="SIPEKASim3D.resetCamera()" title="Reset Kamera 3D">⟳</button>
+            </div>
+          </div>
+
+          <div id="threejs-container"></div>
+
+          <div class="map-overlay-bottom">
+            <!-- Real-time Inundation KPI Bar -->
+            <div class="floating-control-bar" style="gap:1.1rem;padding:0.65rem 1rem;">
+              <div>
+                <div style="font-size:0.68rem;color:var(--text-muted);">LUAS TERGENANG</div>
+                <div id="sim-flooded-area" style="font-size:1.05rem;font-weight:800;color:#38bdf8;">0.00 km²</div>
+              </div>
+              <div>
+                <div style="font-size:0.68rem;color:var(--text-muted);">KECAMATAN TERDAMPAK</div>
+                <div id="sim-impacted-kec" style="font-size:1.05rem;font-weight:800;color:#fbbf24;">0 / 15 Kec.</div>
+              </div>
+              <div>
+                <div style="font-size:0.68rem;color:var(--text-muted);">GENANGAN DI KELAS TINGGI</div>
+                <div id="sim-high-class-pct" style="font-size:1.05rem;font-weight:800;color:#f87171;">0.0%</div>
+              </div>
+            </div>
+
+            <!-- Clicked 3D Cell Inspector Popup -->
+            <div id="sim3d-cell-popup" class="legend-box hidden" style="min-width:290px;"></div>
+
+            <div class="legend-box" style="max-width:340px;font-size:0.7rem;color:var(--text-secondary);">
+              <b>Catatan Metodologis Simulasi:</b> Simulasi kenaikan muka air merupakan model genangan sederhana berbasis elevasi relatif (<em>bathtub model</em>), bukan pemodelan hidrodinamika. Klik sel mesh 3D untuk melihat skor titik.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Statistical Dashboard Panel -->
+      <div class="glass-card dashboard-side-card">
+        <h3 style="font-size:1.1rem;margin-bottom:0.75rem;">📊 Dasbor Statistik Kerawanan Banjir</h3>
+
+        <!-- KPI Count-Up Cards -->
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Total Luas Wilayah Kota</div>
+            <div id="kpi-total-ha" class="kpi-value" style="color:var(--accent-cyan);">0 Ha</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Zona Kerawanan Tinggi</div>
+            <div id="kpi-high-ha" class="kpi-value" style="color:#f87171;">0 Ha</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Rata-rata Skor Indeks S</div>
+            <div id="kpi-mean-s" class="kpi-value">0.00</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Peringkat #1 Paling Rawan</div>
+            <div id="kpi-top-kec" class="kpi-value" style="font-size:1.05rem;color:#fbbf24;">-</div>
+          </div>
+        </div>
+
+        <!-- Donut Chart: Proporsi Luas Kelas -->
+        <div style="margin-bottom:1.25rem;">
+          <h4 style="font-size:0.88rem;color:var(--text-secondary);margin-bottom:0.4rem;">Proporsi Luas Kelas Kerawanan Kota Pekanbaru (Ha &amp; %)</h4>
+          <div style="height:210px;position:relative;">
+            <canvas id="chart-city-donut"></canvas>
+          </div>
+        </div>
+
+        <!-- Interactive 15 Kecamatan Ranking Table -->
+        <div style="margin-bottom:1.25rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;margin-bottom:0.45rem;">
+            <h4 style="font-size:0.88rem;color:var(--text-secondary);">Peringkat 15 Kecamatan (Klik baris untuk Fly-To)</h4>
+            <input id="kecamatan-filter-input" type="text" placeholder="Filter kecamatan..."
+              style="width:155px;padding:0.28rem 0.55rem;font-size:0.76rem;"
+              oninput="SIPEKAApp.renderKecamatanTable()" />
+          </div>
+          <div style="overflow-x:auto;max-height:285px;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th onclick="SIPEKAApp.sortKecamatanTable('peringkat')">Rank ↕</th>
+                  <th onclick="SIPEKAApp.sortKecamatanTable('kecamatan')">Kecamatan ↕</th>
+                  <th onclick="SIPEKAApp.sortKecamatanTable('rendah_persen')">Rendah ↕</th>
+                  <th onclick="SIPEKAApp.sortKecamatanTable('sedang_persen')">Sedang ↕</th>
+                  <th onclick="SIPEKAApp.sortKecamatanTable('tinggi_persen')">Tinggi ↕</th>
+                  <th onclick="SIPEKAApp.sortKecamatanTable('mean_s')">Skor S ↕</th>
+                  <th>Dominan</th>
+                  <th>Faktor Utama</th>
+                </tr>
+              </thead>
+              <tbody id="kecamatan-table-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Stacked Bar Chart: Parameter Contribution per Kecamatan -->
+        <div>
+          <h4 style="font-size:0.88rem;color:var(--text-secondary);margin-bottom:0.4rem;">Kontribusi Tiap Parameter (Bobot × Skor) per Kecamatan</h4>
+          <div style="height:250px;position:relative;">
+            <canvas id="chart-kecamatan-contrib"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       LANGKAH 5: VALIDASI MODEL, ANALISIS SENSITIVITAS & RIWAYAT KALIBRASI
+       ======================================================================== -->
+  <section id="step-panel-5" class="step-panel hidden">
+    <div class="glass-card">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Langkah 5 — Validasi Lapangan, ROC-AUC &amp; Analisis Sensitivitas</h2>
+          <p class="section-desc">
+            Evaluasi akurasi model menggunakan Persamaan 3.5 Bab III: <code>Akurasi (%) = (Σ titik sesuai / total titik) × 100%</code>. Model dinyatakan valid apabila <b>≥ 80%</b>.
+          </p>
+        </div>
+        <div style="display:flex;gap:0.65rem;flex-wrap:wrap;">
+          <button class="btn btn-secondary" onclick="SIPEKAApp.goToStep(2)">
+            🎛️ Kalibrasi Ulang Bobot / Skor
+          </button>
+          <button class="btn btn-primary" onclick="SIPEKAApp.goToStep(6)">
+            Lanjut ke Ekspor &amp; Laporan →
+          </button>
+        </div>
+      </div>
+
+      <div id="validation-empty-box" class="glass-card hidden" style="text-align:center;padding:2rem;">
+        <p style="margin-bottom:1rem;">Data titik banjir historis belum diunggah. Unggah CSV titik banjir pada Langkah 1 atau gunakan Data Demo untuk melihat matriks validasi lengkap.</p>
+        <button class="btn btn-primary" onclick="SIPEKAApp.goToStep(1)">Ke Langkah 1 (Upload Titik Banjir)</button>
+      </div>
+
+      <div id="validation-content-box">
+        <!-- Validation Status Banner -->
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;padding:1rem 1.25rem;border-radius:12px;background:var(--bg-card);border:1px solid var(--border-glass);margin-bottom:1.25rem;">
+          <div>
+            <span id="val-status-badge" class="status-pill success">MODEL VALID</span>
+            <div id="val-points-summary" style="font-size:0.84rem;color:var(--text-secondary);margin-top:0.35rem;"></div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:0.74rem;color:var(--text-muted);">AKURASI KESELURUHAN (PERSAMAAN 3.5)</div>
+            <div id="val-oa-value" style="font-size:2rem;font-weight:800;color:var(--accent-cyan);">0.00%</div>
+          </div>
+        </div>
+
+        <div class="two-col-grid" style="margin-bottom:1.5rem;">
+          <!-- Mode A: 3x3 Confusion Matrix -->
+          <div id="val-mode-a-box" class="glass-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+              <h3 style="font-size:1rem;">Mode A — Confusion Matrix 3×3 (Kelas Lapangan)</h3>
+              <span style="font-size:0.82rem;color:var(--accent-cyan);">Kappa Cohen: <b id="val-kappa-value">-</b></span>
+            </div>
+            <div id="confusion-matrix-container"></div>
+          </div>
+
+          <!-- Mode B: Historical Flood Occurrence & Binary ROC-AUC -->
+          <div class="glass-card">
+            <h3 style="font-size:1rem;margin-bottom:0.65rem;">Mode B — Titik Kejadian Banjir &amp; Kurva ROC-AUC</h3>
+            <div class="kpi-grid" style="margin-bottom:0.65rem;">
+              <div class="kpi-card">
+                <div class="kpi-label">Jatuh di Kelas Sedang / Tinggi</div>
+                <div id="val-modeb-sedang-tinggi" style="font-size:1.05rem;font-weight:800;color:#4ade80;">-</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Jatuh di Kelas Tinggi Saja</div>
+                <div id="val-modeb-tinggi-only" style="font-size:1.05rem;font-weight:800;color:#f87171;">-</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Skor AUC-ROC (Skor S Kontinu)</div>
+                <div id="val-auc-value" style="font-size:1.05rem;font-weight:800;color:var(--accent-cyan);">-</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">F1-Score / Precision / Recall</div>
+                <div id="val-f1-value" style="font-size:0.85rem;font-weight:700;">-</div>
+              </div>
+            </div>
+            <div style="height:175px;position:relative;margin-bottom:0.5rem;">
+              <canvas id="chart-roc-curve"></canvas>
+            </div>
+            <div id="val-modeb-note" style="font-size:0.74rem;color:var(--text-muted);"></div>
+          </div>
+        </div>
+
+        <!-- Sensitivity Analysis Table (±5 percentage points) -->
+        <div class="glass-card" style="margin-bottom:1.5rem;">
+          <h3 style="font-size:1.05rem;margin-bottom:0.35rem;">🔬 Analisis Sensitivitas Parameter (Perubahan Bobot ±5 Poin Persen)</h3>
+          <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.75rem;">
+            Setiap bobot parameter diubah ±5% sementara 4 bobot lainnya disesuaikan secara proporsional agar jumlah total tetap tepat 100%.
+          </p>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Perturbasi</th>
+                  <th>Bobot (Awal → Baru)</th>
+                  <th>Luas Kelas Tinggi (%)</th>
+                  <th>Δ Luas Tinggi (%)</th>
+                  <th>Akurasi Validasi (%)</th>
+                  <th>Δ Akurasi (%)</th>
+                </tr>
+              </thead>
+              <tbody id="sensitivity-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Calibration History & Validation Points Table -->
+        <div class="two-col-grid">
+          <div class="glass-card">
+            <h3 style="font-size:1rem;margin-bottom:0.55rem;">📜 Riwayat Percobaan Kalibrasi Bobot (Siap Ekspor Skripsi)</h3>
+            <div style="overflow-x:auto;max-height:260px;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Waktu</th>
+                    <th>Komposisi Bobot</th>
+                    <th>Zona Tinggi</th>
+                    <th>Akurasi</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="calibration-history-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <h3 style="font-size:1rem;margin-bottom:0.55rem;">📍 Daftar Titik Validasi (Klik untuk Lihat di Peta 3D)</h3>
+            <div style="overflow-x:auto;max-height:260px;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Lokasi</th>
+                    <th>Koordinat</th>
+                    <th>Skor S</th>
+                    <th>Model</th>
+                    <th>Lapangan</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="val-points-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       LANGKAH 6: EKSPOR GEOTIFF, SHP/GPKG, EXCEL & LAYOUT PETA PDF/PNG
+       ======================================================================== -->
+  <section id="step-panel-6" class="step-panel hidden">
+    <div class="glass-card">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Langkah 6 — Ekspor Hasil GIS, Tabel Skripsi &amp; Layout Peta Resmi</h2>
+          <p class="section-desc">
+            Seluruh raster diekspor dalam sistem koordinat <b>WGS 84 / UTM Zone 47N (EPSG:32647)</b> dengan kompresi LZW beserta <code>metadata.json</code>.
+          </p>
+        </div>
+        <button class="btn btn-primary" onclick="SIPEKAApp.downloadExport('all_zip')">
+          📦 Unduh Paket Lengkap Semua File (.ZIP)
+        </button>
+      </div>
+
+      <!-- Polygon Filter Options -->
+      <div style="display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;padding:0.85rem 1.1rem;border-radius:12px;background:var(--bg-card);border:1px solid var(--border-glass);margin-bottom:1.25rem;font-size:0.84rem;">
+        <strong>⚙️ Pengaturan Vektorisasi Poligon (SHP / GPKG):</strong>
+        <label style="display:inline-flex;align-items:center;gap:0.45rem;">
+          Filter Luas Minimum (Hindari poligon 1 piksel):
+          <input id="export-min-area-ha" type="number" min="0" step="0.5" value="1.0" style="width:80px;" /> Ha
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:0.45rem;cursor:pointer;">
+          <input id="export-smooth-poly" type="checkbox" /> Haluskan Batas Poligon (Smoothing)
+        </label>
+      </div>
+
+      <div class="export-grid">
+        <!-- 1. GeoTIFF Bundle -->
+        <div class="export-card">
+          <div>
+            <h3 style="font-size:1rem;color:var(--accent-cyan);">1. Raster GeoTIFF (EPSG:32647, LZW)</h3>
+            <p style="font-size:0.8rem;color:var(--text-secondary);margin-top:0.35rem;">
+              Berisi raster Skor S (float32), raster Kelas Kerawanan (1/2/3), serta 5 raster skor parameter (CH, Slope, Elev, LU, Riv).
+            </p>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" onclick="SIPEKAApp.downloadExport('geotiff_zip')">
+              ⬇️ Semua 7 GeoTIFF (.ZIP)
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="SIPEKAApp.downloadExport('geotiff_s')">
+              Skor S (.TIF)
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="SIPEKAApp.downloadExport('geotiff_kelas')">
+              Kelas (.TIF)
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Vector SHP & GPKG -->
+        <div class="export-card">
+          <div>
+            <h3 style="font-size:1rem;color:var(--accent-cyan);">2. Vektor Poligon Kelas (SHP &amp; GPKG)</h3>
+            <p style="font-size:0.8rem;color:var(--text-secondary);margin-top:0.35rem;">
+              Poligon ter-dissolve per kelas kerawanan dengan atribut kolom <code>KELAS</code> dan <code>LUAS_HA</code> (telah difilter dari noise 1 piksel).
+            </p>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" onclick="SIPEKAApp.downloadExport('gpkg')">
+              ⬇️ GeoPackage (.GPKG)
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="SIPEKAApp.downloadExport('shp')">
+              ⬇️ Shapefile (.ZIP)
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. Excel Report -->
+        <div class="export-card">
+          <div>
+            <h3 style="font-size:1rem;color:var(--accent-cyan);">3. Laporan Statistik Excel (.XLSX)</h3>
+            <p style="font-size:0.8rem;color:var(--text-secondary);margin-top:0.35rem;">
+              Berisi sheet Ringkasan Kota, Tabel 15 Kecamatan, Bobot &amp; Pemetaan Lahan, Hasil Validasi, Sensitivitas, dan Riwayat Kalibrasi.
+            </p>
+          </div>
+          <div>
+            <button class="btn btn-primary btn-sm" onclick="SIPEKAApp.downloadExport('excel')">
+              📊 Unduh Laporan Excel (.XLSX)
+            </button>
+          </div>
+        </div>
+
+        <!-- 4. Cartographic Map PDF/PNG -->
+        <div class="export-card">
+          <div>
+            <h3 style="font-size:1rem;color:var(--accent-cyan);">4. Layout Peta Kartografis (PDF &amp; PNG)</h3>
+            <p style="font-size:0.8rem;color:var(--text-secondary);margin-top:0.35rem;">
+              Judul standar skripsi, legenda Hijau/Kuning/Merah, skala batang, panah utara, grid UTM 47N, peta inset Provinsi Riau, sumber data, Tahun 2026.
+            </p>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" onclick="SIPEKAApp.downloadExport('map_pdf')">
+              🗺️ Layout Peta (.PDF)
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="SIPEKAApp.downloadExport('map_png')">
+              🖼️ Layout Peta (.PNG)
+            </button>
+          </div>
+        </div>
+
+        <!-- 5. 3D Screenshot & Metadata JSON -->
+        <div class="export-card">
+          <div>
+            <h3 style="font-size:1rem;color:var(--accent-cyan);">5. Tangkapan Layar 3D &amp; Reproduksibilitas</h3>
+            <p style="font-size:0.8rem;color:var(--text-secondary);margin-top:0.35rem;">
+              Simpan screenshot tampilan kanvas 3D saat ini (PNG) dan file <code>metadata.json</code> (parameter, bobot, versi, timestamp).
+            </p>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" onclick="SIPEKAApp.download3DScreenshot()">
+              📸 Screenshot 3D (.PNG)
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="SIPEKAApp.downloadExport('metadata')">
+              📄 metadata.json
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Cartographic Map Layout Preview -->
+      <div class="glass-card" style="margin-top:1.5rem;text-align:center;">
+        <h3 style="font-size:1rem;margin-bottom:0.75rem;">🖼️ Pratinjau Layout Peta Tingkat Kerawanan Banjir Kota Pekanbaru (Tahun 2026)</h3>
+        <img id="carto-map-preview" alt="Pratinjau Layout Peta Kerawanan Banjir Kota Pekanbaru"
+          style="max-width:100%;max-height:560px;border-radius:12px;border:1px solid var(--border-glass);" />
+      </div>
+    </div>
+  </section>
+
+  <!-- Modal Akses HP (QR Code & Link Wi-Fi) -->
+  <div id="mobile-access-modal" class="modal-backdrop hidden" onclick="if(event.target===this) SIPEKAApp.closeMobileAccessModal()">
+    <div class="modal-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <h3 style="font-size:1.1rem;color:var(--accent-cyan);">📱 Buka SIPEKA-Banjir 3D di HP</h3>
+        <button class="btn btn-secondary btn-sm" onclick="SIPEKAApp.closeMobileAccessModal()">✕</button>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:0.9rem;">
+        Pastikan <b>HP dan Laptop terhubung ke jaringan Wi-Fi atau Hotspot yang sama</b>, lalu scan QR Code di bawah atau buka alamat berikut di browser Chrome / Safari HP:
+      </p>
+      <div style="background:#ffffff;padding:0.65rem;border-radius:12px;display:inline-block;margin-bottom:0.9rem;">
+        <img id="mobile-qr-img" alt="QR Code Buka di HP" width="180" height="180" style="display:block;" />
+      </div>
+      <div style="display:flex;gap:0.45rem;margin-bottom:0.9rem;">
+        <input id="mobile-lan-url-input" type="text" readonly value="http://10.61.71.203:8000"
+          style="font-family:var(--font-mono);font-weight:700;text-align:center;color:var(--accent-cyan);" />
+        <button id="btn-copy-mobile-url" class="btn btn-primary btn-sm" onclick="SIPEKAApp.copyMobileUrl()">
+          📋 Salin
+        </button>
+      </div>
+      <div style="text-align:left;font-size:0.74rem;color:var(--text-muted);background:var(--bg-card);padding:0.65rem 0.85rem;border-radius:8px;border:1px solid var(--border-glass);">
+        <b>Tips jika tidak terbuka di HP:</b>
+        <ol style="padding-left:1.1rem;margin-top:0.25rem;">
+          <li>Gunakan Wi-Fi rumah/kampus yang sama, atau nyalakan <b>Hotspot HP</b> lalu sambungkan Laptop ke Hotspot HP tersebut.</li>
+          <li>Jika Windows Firewall menanyakan izin untuk Python, centang <b>Private &amp; Public networks (Allow access)</b>.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- Application Scripts -->
+  <script src="/js/charts.js"></script>
+  <script src="/js/map3d.js"></script>
+  <script src="/js/sim3d.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
+
